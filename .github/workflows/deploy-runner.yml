@@ -1,0 +1,193 @@
+name: 🚀 Deploy Hetzner Runner & Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'utils.py'          # триггер только если изменился код
+      - 'tests/**'
+  workflow_dispatch:        # ручной запуск для тестов
+
+jobs:
+  deploy-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (jq)
+        run: sudo apt-get install -y jq
+
+      # ── 1. Получаем runner registration token ──────────────────────────────
+      - name: Get GitHub runner registration token
+        id: reg_token
+        run: |
+          TOKEN=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token" \
+            | jq -r '.token')
+
+          [[ "$TOKEN" == "null" || -z "$TOKEN" ]] && echo "❌ Failed to get runner token" && exit 1
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+          echo "✓ Runner token obtained"
+
+      # ── 2. Создаём Hetzner VPS с cloud-init ───────────────────────────────
+      - name: Create Hetzner VPS
+        id: create_server
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          CF_TUNNEL_TOKEN: ${{ secrets.CF_TUNNEL_TOKEN }}
+          REG_TOKEN: ${{ steps.reg_token.outputs.token }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          SERVER_NAME="gh-runner-${{ github.run_id }}"
+          echo "server_name=$SERVER_NAME" >> $GITHUB_OUTPUT
+
+          CLOUD_INIT=$(cat <<CLOUDINIT
+          #!/bin/bash
+          set -e
+          exec > /var/log/runner-setup.log 2>&1
+
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq curl jq git python3 python3-pip
+
+          # Cloudflare Tunnel (нет публичного SSH)
+          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+            | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] \
+            https://pkg.cloudflare.com/cloudflared any main" \
+            > /etc/apt/sources.list.d/cloudflared.list
+          apt-get update -qq && apt-get install -y -qq cloudflared
+          cloudflared service install ${CF_TUNNEL_TOKEN}
+          systemctl start cloudflared
+          echo "✓ Cloudflare tunnel started"
+
+          # GitHub Actions Runner
+          RUNNER_VERSION=\$(curl -s https://api.github.com/repos/actions/runner/releases/latest \
+            | jq -r '.tag_name' | sed 's/v//')
+          mkdir -p /opt/actions-runner && cd /opt/actions-runner
+          curl -sL "https://github.com/actions/runner/releases/download/v\${RUNNER_VERSION}/actions-runner-linux-x64-\${RUNNER_VERSION}.tar.gz" \
+            | tar xz
+
+          ./config.sh \
+            --url "https://github.com/${GITHUB_REPO}" \
+            --token "${REG_TOKEN}" \
+            --name "${SERVER_NAME}" \
+            --labels "ephemeral,hetzner,${SERVER_NAME}" \
+            --ephemeral \
+            --unattended \
+            --disableupdate
+
+          echo "✓ Runner registered"
+          ./run.sh --once || true
+          echo "✓ Runner done"
+          CLOUDINIT
+          )
+
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.hetzner.cloud/v1/servers" \
+            -d "{
+              \"name\": \"${SERVER_NAME}\",
+              \"server_type\": \"cx22\",
+              \"image\": \"ubuntu-22.04\",
+              \"location\": \"nbg1\",
+              \"user_data\": $(echo "$CLOUD_INIT" | jq -Rs .),
+              \"public_net\": {\"enable_ipv4\": true, \"enable_ipv6\": false}
+            }")
+
+          SERVER_ID=$(echo "$RESPONSE" | jq -r '.server.id')
+          [[ "$SERVER_ID" == "null" || -z "$SERVER_ID" ]] && \
+            echo "❌ Failed to create server" && echo "$RESPONSE" && exit 1
+
+          echo "server_id=$SERVER_ID" >> $GITHUB_OUTPUT
+          echo "✓ Server created (ID: $SERVER_ID, Name: $SERVER_NAME)"
+
+      # ── 3. Ждём пока runner появится онлайн ───────────────────────────────
+      - name: Wait for runner to come online
+        env:
+          SERVER_NAME: ${{ steps.create_server.outputs.server_name }}
+        run: |
+          echo "⏳ Waiting for runner '${SERVER_NAME}' (max 5 min)..."
+          for i in $(seq 1 30); do
+            RUNNER=$(curl -s \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_PAT }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runners" \
+              | jq -r --arg name "$SERVER_NAME" \
+                '.runners[] | select(.name == $name and .status == "online") | .name')
+
+            [[ -n "$RUNNER" ]] && echo "✓ Runner online!" && exit 0
+            echo "   ...${i}0s"
+            sleep 10
+          done
+          echo "❌ Runner never came online" && exit 1
+
+      # ── 4. Запускаем тесты на Hetzner runner ──────────────────────────────
+      - name: Trigger test workflow
+        env:
+          SERVER_NAME: ${{ steps.create_server.outputs.server_name }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_PAT }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/run-tests.yml/dispatches" \
+            -d "{\"ref\": \"main\", \"inputs\": {\"runner_label\": \"${SERVER_NAME}\"}}"
+          echo "✓ Test workflow dispatched on runner: ${SERVER_NAME}"
+
+      # ── 5. Ждём завершения тестов ──────────────────────────────────────────
+      - name: Wait for tests to finish
+        id: wait_tests
+        run: |
+          echo "⏳ Waiting for test job (max 10 min)..."
+          for i in $(seq 1 40); do
+            sleep 15
+            STATUS=$(curl -s \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_PAT }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=10" \
+              | jq -r '[.workflow_runs[] | select(.name == "🧪 Run Tests (Ephemeral Runner)" and .status != "queued" and .status != "in_progress")] | first | .conclusion // empty')
+
+            [[ -n "$STATUS" ]] && echo "status=$STATUS" >> $GITHUB_OUTPUT && \
+              echo "✓ Tests finished: $STATUS" && exit 0
+            echo "   ...${i}x15s"
+          done
+          echo "status=timeout" >> $GITHUB_OUTPUT
+          echo "⏱️ Timeout waiting for tests"
+
+      # ── 6. Удаляем VPS (always — даже если тесты упали) ───────────────────
+      - name: Delete Hetzner VPS
+        if: always()
+        env:
+          SERVER_ID: ${{ steps.create_server.outputs.server_id }}
+        run: |
+          [[ -z "$SERVER_ID" || "$SERVER_ID" == "null" ]] && \
+            echo "No server to delete" && exit 0
+
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+            -H "Authorization: Bearer ${{ secrets.HCLOUD_TOKEN }}" \
+            "https://api.hetzner.cloud/v1/servers/${SERVER_ID}")
+
+          [[ "$HTTP" == "204" || "$HTTP" == "200" ]] && \
+            echo "✓ Server ${SERVER_ID} deleted" || \
+            echo "⚠️ Delete returned HTTP ${HTTP} — check Hetzner console!"
+
+      # ── 7. Итог ───────────────────────────────────────────────────────────
+      - name: Summary
+        if: always()
+        run: |
+          STATUS="${{ steps.wait_tests.outputs.status }}"
+          echo "══════════════════════════════════════"
+          if [[ "$STATUS" == "success" ]]; then
+            echo "  ✅ Tests PASSED — server destroyed"
+          elif [[ "$STATUS" == "timeout" ]]; then
+            echo "  ⏱️  Timeout — server destroyed, check Actions"
+          else
+            echo "  ❌ Tests ${STATUS} — server destroyed"
+          fi
+          echo "══════════════════════════════════════"
