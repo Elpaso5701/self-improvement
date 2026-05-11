@@ -56,7 +56,6 @@ jobs:
             - ✅ Enhanced code quality
             - ✅ All tests passing
             
-            **Generated at:** $(date -u '+%Y-%m-%d %H:%M UTC')
             **Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           branch: auto-improve/${{ github.run_id }}
           delete-branch: true
@@ -64,8 +63,6 @@ jobs:
             🤖 automated
             ✨ enhancement
           assignees: |
-            ${{ github.repository_owner }}
-          reviewers: |
             ${{ github.repository_owner }}
 
       - name: Log PR creation result
