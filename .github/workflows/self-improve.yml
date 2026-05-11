@@ -45,7 +45,7 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GH_PAT }}
-          commit-message: "🤖 Auto-improvement: $(date -u '+%Y-%m-%d %H:%M UTC')"
+          commit-message: "🤖 Auto-improvement"
           title: "🤖 Auto-improvement from LLM Agent"
           body: |
             ## 🤖 Automatic Code Improvements
