@@ -24,7 +24,8 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: PYTHONPATH=. pytest tests/ -v --tb=short
+        run: |
+          pip install -q pytest==7.4.3 httpx==0.24.1
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
