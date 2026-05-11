@@ -94,7 +94,7 @@ jobs:
             "https://api.hetzner.cloud/v1/servers" \
             -d "{
               \"name\": \"${SERVER_NAME}\",
-              \"server_type\": \"cx22\",
+              \"server_type\": \"cx21\",
               \"image\": \"ubuntu-22.04\",
               \"location\": \"nbg1\",
               \"user_data\": $(echo "$CLOUD_INIT" | jq -Rs .),
