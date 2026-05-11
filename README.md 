@@ -1,0 +1,15 @@
+# Self-Improvement Repository
+
+Simple utility functions for testing LLM-powered auto-improvements.
+
+## Functions
+- add(a, b) - Addition
+- multiply(a, b) - Multiplication
+- validate_email(email) - Email validation
+- count_words(text) - Word counting
+- reverse_string(s) - String reversal
+
+## How to use
+```python
+from utils import add
+result = add(2, 3)
