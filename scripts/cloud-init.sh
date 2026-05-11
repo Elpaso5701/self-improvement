@@ -37,5 +37,5 @@ RUNNER_ALLOW_RUNASROOT=1 ./config.sh \
   --disableupdate
 
 echo "✓ Runner registered"
-RUNNER_ALLOW_RUNASROOT=1 ./run.sh --once || true
+RUNNER_ALLOW_RUNASROOT=1 ./run.sh > /var/log/gha-runner.log 2>&1
 echo "✓ Runner done"
