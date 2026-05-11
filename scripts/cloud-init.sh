@@ -17,12 +17,16 @@ systemctl start cloudflared
 echo "✓ Cloudflare tunnel started"
 
 # GitHub Actions Runner
-RUNNER_VERSION=$(curl -sL https://api.github.com/repos/actions/runner/releases/latest \
-  | jq -r '.tag_name' | sed 's/v//')
+RUNNER_VERSION="2.322.0"
 echo "Runner version: ${RUNNER_VERSION}"
+
 mkdir -p /opt/actions-runner && cd /opt/actions-runner
 curl -sL -o runner.tar.gz \
   "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+
+file runner.tar.gz
+tar xzf runner.tar.gz
+rm runner.tar.gz
 
 ./config.sh \
   --url "https://github.com/${GITHUB_REPO}" \
