@@ -114,10 +114,7 @@ jobs:
 # 3️⃣ DELETE RUNNER
 # ═══════════════════════════════════════
   delete-runner:
-    needs:
-      - create-runner
-      - test
-
+    needs: [create-runner, test]
     runs-on: ubuntu-latest
     if: always()
 
@@ -129,3 +126,6 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
           server_id: ${{ needs.create-runner.outputs.server_id }}
+      
+      - name: Wait cleanup sync
+        run: sleep 20    
