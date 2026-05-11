@@ -10,22 +10,24 @@ on:
 
 jobs:
   # ══════════════════════════════════════════════════════════════════════════
-  # 1️⃣ DEPLOY: Создаёт Hetzner машину и ждёт runner'а
+  # 1️⃣ DEPLOY
   # ══════════════════════════════════════════════════════════════════════════
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     outputs:
       server_id: ${{ steps.create_server.outputs.server_id }}
+      server_name: ${{ steps.create_server.outputs.server_name }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies (jq)
-        run: sudo apt-get install -y jq
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Get GitHub runner registration token
+      - name: Get GitHub runner token
         id: reg_token
         run: |
           TOKEN=$(curl -s -X POST \
@@ -34,9 +36,8 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token" \
             | jq -r '.token')
 
-          [[ "$TOKEN" == "null" || -z "$TOKEN" ]] && echo "❌ Failed to get runner token" && exit 1
+          [[ -z "$TOKEN" || "$TOKEN" == "null" ]] && exit 1
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
-          echo "✓ Runner token obtained"
 
       - name: Create Hetzner VPS
         id: create_server
@@ -48,64 +49,79 @@ jobs:
         run: |
           SERVER_NAME="gh-runner-${{ github.run_id }}"
           echo "server_name=$SERVER_NAME" >> $GITHUB_OUTPUT
-          
+
           CLOUD_INIT=$(envsubst '${CF_TUNNEL_TOKEN} ${REG_TOKEN} ${GITHUB_REPO} ${SERVER_NAME}' < scripts/cloud-init.sh)
-          
+
           LOCATIONS=("nbg1" "fsn1" "hel1")
           SERVER_ID=""
-                
+
           for LOCATION in "${LOCATIONS[@]}"; do
-            echo "▶ Trying location: ${LOCATION}..."
             RESPONSE=$(curl -s -X POST \
-                -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
-                -H "Content-Type: application/json" \
-                "https://api.hetzner.cloud/v1/servers" \
-                -d "{
+              -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "https://api.hetzner.cloud/v1/servers" \
+              -d "{
                 \"name\": \"${SERVER_NAME}\",
                 \"server_type\": \"cx23\",
                 \"image\": \"ubuntu-22.04\",
                 \"location\": \"${LOCATION}\",
                 \"user_data\": $(echo "$CLOUD_INIT" | jq -Rs .),
                 \"public_net\": {\"enable_ipv4\": true, \"enable_ipv6\": false}
-                }")
+              }")
 
             SERVER_ID=$(echo "$RESPONSE" | jq -r '.server.id')
 
             if [[ -n "$SERVER_ID" && "$SERVER_ID" != "null" ]]; then
-              echo "✓ Server created in ${LOCATION} (ID: $SERVER_ID)"
               break
             fi
-
-            echo "   ✗ ${LOCATION} unavailable, trying next..."
           done
-        
-          [[ -z "$SERVER_ID" || "$SERVER_ID" == "null" ]] && \
-            echo "❌ Failed to create server in all locations" && exit 1
+
+          [[ -z "$SERVER_ID" || "$SERVER_ID" == "null" ]] && exit 1
 
           echo "server_id=$SERVER_ID" >> $GITHUB_OUTPUT
-          echo "✓ Server created (ID: $SERVER_ID, Name: $SERVER_NAME)"
 
-      - name: Wait for runner to come online
+      # 🔍 DEBUG (важно)
+      - name: Debug runner state
+        run: |
+          curl -s \
+            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners" \
+            | jq '.runners[] | {name, status, busy, labels}'
+
+      # ⏳ WAIT FOR RUNNER
+      - name: Wait for runner
         env:
           SERVER_NAME: ${{ steps.create_server.outputs.server_name }}
         run: |
-          echo "⏳ Waiting for runner '${SERVER_NAME}' (max 5 min)..."
-          for i in $(seq 1 30); do
+          echo "Waiting for runner..."
+
+          sleep 20
+
+          for i in $(seq 1 40); do
             RUNNER=$(curl -s \
               -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/runners" \
-              | jq -r --arg name "$SERVER_NAME" \
-                '(.runners // [])[] | select(.name == $name and .status == "online") | .name')
+              | jq -r --arg name "$SERVER_NAME" '
+                (.runners // [])
+                | map(select(.name == $name and .status == "online" and .busy == false))
+                | .[0].name // empty
+              ')
 
-            [[ -n "$RUNNER" ]] && echo "✓ Runner online!" && exit 0
-            echo "   ...${i}0s"
+            if [[ -n "$RUNNER" ]]; then
+              echo "Runner ready!"
+              exit 0
+            fi
+
             sleep 10
           done
-          echo "❌ Runner never came online" && exit 1
+
+          echo "Runner timeout"
+          exit 1
 
   # ══════════════════════════════════════════════════════════════════════════
-  # 2️⃣ TEST: Запускает тесты на ephemeral runner'е
+  # 2️⃣ TEST
   # ══════════════════════════════════════════════════════════════════════════
   test:
     needs: deploy
@@ -114,28 +130,21 @@ jobs:
       runner_label: gh-runner-${{ github.run_id }}
 
   # ══════════════════════════════════════════════════════════════════════════
-  # 3️⃣ CLEANUP: Удаляет машину (ВСЕГДА, даже если тесты упали)
+  # 3️⃣ CLEANUP
   # ══════════════════════════════════════════════════════════════════════════
   cleanup:
     if: always()
     needs: [deploy, test]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
 
     steps:
-      - name: Delete Hetzner VPS
+      - name: Delete server
         env:
           SERVER_ID: ${{ needs.deploy.outputs.server_id }}
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
-          [[ -z "$SERVER_ID" || "$SERVER_ID" == "null" ]] && \
-            echo "✓ No server to delete" && exit 0
+          [[ -z "$SERVER_ID" ]] && exit 0
 
-          echo "Deleting server ${SERVER_ID}..."
-          HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+          curl -s -X DELETE \
             -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
-            "https://api.hetzner.cloud/v1/servers/${SERVER_ID}")
-
-          [[ "$HTTP" == "204" || "$HTTP" == "200" ]] && \
-            echo "✓ Server ${SERVER_ID} deleted" || \
-            echo "⚠️ Delete returned HTTP ${HTTP}"
+            "https://api.hetzner.cloud/v1/servers/${SERVER_ID}"
