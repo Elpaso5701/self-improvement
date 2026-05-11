@@ -8,29 +8,78 @@ on:
       - 'tests/**'
   workflow_dispatch:
 
+concurrency:
+  group: hetzner-runner-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
-  # ═══════════════════════════════════════
-  # 1️⃣ CREATE RUNNER
-  # ═══════════════════════════════════════
+# ═══════════════════════════════════════
+# 1️⃣ CREATE RUNNER (multi-region failover)
+# ═══════════════════════════════════════
   create-runner:
     runs-on: ubuntu-latest
 
     outputs:
-      server_id: ${{ steps.runner.outputs.server_id }}
-      label: ${{ steps.runner.outputs.label }}
+      server_id: ${{ steps.create.outputs.server_id }}
+      label: ${{ steps.create.outputs.label }}
+      location: ${{ steps.create.outputs.location }}
 
     steps:
-      - name: Create runner
-        id: runner
-        uses: Cyclenerd/hcloud-github-runner@v1
-        with:
-          mode: create
-          github_token: ${{ secrets.GH_PAT }}
-          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
-          server_type: cx23
-          location: nbg1
-          image: ubuntu-22.04
+      - name: Create Hetzner runner (failover)
+        id: create
+        shell: bash
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -e
+
+          LOCATIONS=("nbg1" "fsn1" "hel1")
+
+          SERVER_ID=""
+          LOCATION=""
+          LABEL="gh-runner-${{ github.run_id }}"
+
+          echo "Starting multi-region provisioning..."
+
+          for LOC in "${LOCATIONS[@]}"; do
+            echo "▶ Trying region: $LOC"
+
+            RESPONSE=$(curl -s -X POST \
+              -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "https://api.hetzner.cloud/v1/servers" \
+              -d "{
+                \"name\": \"${LABEL}\",
+                \"server_type\": \"cx23\",
+                \"image\": \"ubuntu-22.04\",
+                \"location\": \"${LOC}\",
+                \"public_net\": {
+                  \"enable_ipv4\": true,
+                  \"enable_ipv6\": false
+                }
+              }")
+
+            SERVER_ID=$(echo "$RESPONSE" | jq -r '.server.id // empty')
+
+            if [[ -n "$SERVER_ID" ]]; then
+              LOCATION="$LOC"
+              echo "✓ Server created in ${LOCATION} (ID: ${SERVER_ID})"
+              break
+            fi
+
+            echo "✗ ${LOC} failed, trying next..."
+          done
+
+          if [[ -z "$SERVER_ID" ]]; then
+            echo "❌ Failed to create server in all regions"
+            exit 1
+          fi
+
+          echo "server_id=$SERVER_ID" >> $GITHUB_OUTPUT
+          echo "label=$LABEL" >> $GITHUB_OUTPUT
+          echo "location=$LOCATION" >> $GITHUB_OUTPUT
 
   # ═══════════════════════════════════════
   # 2️⃣ RUN TESTS
