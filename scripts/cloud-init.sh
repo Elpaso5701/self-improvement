@@ -21,8 +21,8 @@ RUNNER_VERSION=$(curl -sL https://api.github.com/repos/actions/runner/releases/l
   | jq -r '.tag_name' | sed 's/v//')
 echo "Runner version: ${RUNNER_VERSION}"
 mkdir -p /opt/actions-runner && cd /opt/actions-runner
-curl -sL "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
-  | tar xz
+curl -sL -o runner.tar.gz \
+  "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
 
 ./config.sh \
   --url "https://github.com/${GITHUB_REPO}" \
