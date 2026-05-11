@@ -128,6 +128,9 @@ jobs:
         env:
           SERVER_ID: ${{ steps.create_server.outputs.server_id }}
         run: |
+          echo "⏸️ Waiting 120s before delete — time to check console..."
+          sleep 120    # ← временно, уберём после диагностики
+
           [[ -z "$SERVER_ID" || "$SERVER_ID" == "null" ]] && \
             echo "No server to delete" && exit 0
 
