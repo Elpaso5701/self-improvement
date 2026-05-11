@@ -1,146 +1,110 @@
-# 🤖 Self-Improvement Repository
+# 🤖 Self-Improving Python Utilities
 
-Репозиторий с LLM-агентом, который автоматически улучшает код каждые 2 часа,
-и эфемерным Hetzner VPS-раннером для запуска тестов без публичного SSH.
+This repository demonstrates a fully automated, self-improving Python codebase using LLMs (Large Language Models) and ephemeral CI infrastructure.
 
----
-
-## Структура
-
-```
-├── utils.py                          # Код, который улучшает LLM
-├── tests/
-│   └── test_utils.py                 # Тесты
-├── scripts/
-│   ├── improve_agent.py              # LLM-агент улучшений
-│   └── deploy-runner.sh             # One-click деплой Hetzner VPS
-├── .github/workflows/
-│   ├── self-improve.yml              # Запуск агента каждые 2 часа
-│   └── run-tests.yml                 # Тесты на эфемерном раннере
-└── .env.example                      # Шаблон переменных
-```
+- **Automated code improvement:** Every 2 hours, an LLM agent reviews and enhances the codebase, creating a Pull Request with improvements if all tests pass.
+- **Ephemeral CI runners:** Tests are executed on temporary Hetzner VPS machines, which are created and destroyed automatically to minimize costs and maximize security.
+- **Zero public SSH exposure:** All CI runners are accessible only via secure tunnels.
 
 ---
 
-## Task 1: LLM Self-Improvement (GitHub Actions)
+## 🚀 Features
 
-### Как работает
+### 1. LLM-Powered Self-Improvement
 
-1. Каждые **2 часа** GitHub Actions запускает `scripts/improve_agent.py`
-2. Агент читает `utils.py` + тесты и отправляет их в GPT-4o-mini
-3. LLM возвращает улучшенный код: типы, докстринги, новые функции
-4. Агент запускает `pytest` — если тесты проходят, коммит пушится
-5. Если тесты падают — откат к оригиналу, коммита нет
+- The `improve_agent.py` script uses OpenAI GPT-4o to:
+  - Add type hints and docstrings
+  - Refactor and optimize code
+  - Add new utility functions with corresponding tests
+- Improvements are committed only if all tests pass.
+- Automated workflow runs every 2 hours via GitHub Actions (`.github/workflows/self-improve.yml`).
 
-### Настройка
+### 2. Ephemeral Hetzner CI Runners
 
-1. Добавь секрет в GitHub репозитории:
-   `Settings → Secrets → Actions → New secret`
-   ```
-   OPENAI_API_KEY = sk-proj-...
-   ```
-
-2. Убедись что workflow файл в `.github/workflows/self-improve.yml`
-
-3. Опционально — запусти вручную:
-   `Actions → LLM Self-Improvement Agent → Run workflow`
+- On each pull request or code change, a minimal Hetzner VPS is provisioned using [Cyclenerd/hcloud-github-runner](https://github.com/Cyclenerd/hcloud-github-runner).
+- The runner is accessible only via secure tunnels (no public SSH).
+- After tests complete, the VPS is deleted to avoid unnecessary costs (approx. €0.01 per test run).
+- See `.github/workflows/deploy-runner.yml` for details.
 
 ---
 
-## Task 2: Эфемерный Hetzner VPS Runner
-
-### Архитектура
-
+## 📁 Repository Structure
 ```
-Локальный скрипт
-      │
-      ├─► Hetzner API → создаёт VPS (cx11, 2.99 EUR/мес)
-      │
-      └─► VPS при старте (cloud-init):
-              ├─ cloudflared tunnel (нет публичного SSH!)
-              ├─ GitHub Actions runner (ephemeral)
-              └─ запускает тесты → самоудаляется
-                        │
-                        └─► скрипт удаляет VPS через Hetzner API
+.github/workflows/ 
+├── deploy-runner.yml  # CI: Ephemeral Hetzner runner for tests 
+└── self-improve.yml   # CI: LLM-powered self-improvement workflow scripts/ 
+scripts/
+  └── improve_agent.py # Main LLM agent script tests/ 
+tests
+  └── test_utils.py    # Unit tests for utils.py (auto-improved) 
+└── utils.py           # Python utility functions (auto-improved) 
+requirements.txt       # Python dependencies
 ```
 
-**Стоимость**: cx11 стоит ~0.005 EUR/час → один прогон тестов ≈ **0.01–0.02 EUR**
+## ⚡ Getting Started
 
-### Предварительные требования
+### 1. Prerequisites
+
+- Python 3.11+
+- [Hetzner Cloud account](https://www.hetzner.com/cloud)
+- OpenAI API key (personal subscription)
+- GitHub repository with Actions enabled
+
+### 2. Setup
 
 ```bash
-# macOS
-brew install hcloud jq
-
-# Ubuntu/Debian
-apt install hcloud-cli jq
-```
-
-### Первичная настройка (один раз)
-
-#### 1. Hetzner API Token
-```
-console.hetzner.cloud → Project → Security → API Tokens → Generate
-```
-
-#### 2. GitHub PAT
-```
-github.com → Settings → Developer settings → Personal access tokens
-Scopes: repo ✓  workflow ✓
-```
-
-#### 3. Cloudflare Zero Trust Tunnel
-```
-dash.cloudflare.com → Zero Trust → Networks → Tunnels
-→ Create a tunnel → cloudflared → скопируй token
-```
-> Туннель обеспечивает управление сервером **без открытых входящих портов**.
-> SSH недоступен снаружи — только исходящее соединение через Cloudflare.
-
-#### 4. Заполни .env
-
+# Clone the repository
+git clone https://github.com/your-username/self-improvement.git
+cd self-improvement
+````
+# Install dependencies
 ```bash
-cp .env.example .env
-# отредактируй .env, вставь все токены
-```
-
-### Запуск
-
-```bash
-chmod +x scripts/deploy-runner.sh
-./scripts/deploy-runner.sh
-```
-
-Скрипт:
-1. Получает runner registration token от GitHub
-2. Создаёт VPS на Hetzner с cloud-init
-3. VPS устанавливает cloudflared + GitHub runner
-4. Тригерит workflow `run-tests.yml` на этом раннере
-5. Ждёт завершения job
-6. **Удаляет VPS** через Hetzner API
-
-### Расчёт стоимости тестов
-
-| Параметр | Значение |
-|---|---|
-| Тип машины | cx11 |
-| Цена | 2.99 EUR/мес = ~0.004 EUR/час |
-| Время теста | ~5–10 минут |
-| Стоимость одного запуска | **≈ 0.001–0.002 EUR** |
-| 30 запусков в месяц | **≈ 0.04–0.06 EUR** |
-
----
-
-## Локальный запуск
-
-```bash
-# Установить зависимости
 pip install -r requirements.txt
-
-# Запустить тесты
-pytest tests/ -v
-
-# Запустить агента локально (нужен OPENAI_API_KEY в окружении)
-export OPENAI_API_KEY=sk-proj-...
-python scripts/improve_agent.py
 ```
+## 🛠️ How It Works
+
+### 🤖 LLM Self-Improvement Workflow
+
+- **Schedule:** Runs every 2 hours or manually.
+- **Process:**
+  1. Checks out the latest code.
+  2. Runs `scripts/improve_agent.py`:
+      - Reads `utils.py` and `tests/test_utils.py`
+      - Asks GPT-4o for improvements and new utilities
+      - Validates syntax and runs all tests
+      - If tests pass, creates a Pull Request with changes
+  3. All improvements are reviewed via PR and auto test on self-hosted Hetzner Runner before before merging with
+
+### 🏃‍♂️ Ephemeral Hetzner Runner Workflow
+
+- **Trigger:** On pull requests or changes to `utils.py` or `tests/`.
+- **Process:**
+  1. Provisions a minimal Hetzner VPS (no public SSH).
+  2. Registers it as a self-hosted GitHub Actions runner.
+  3. Installs dependencies and runs all tests.
+  4. Destroys the VPS after tests complete.
+
+### 🔒 Security & 💸 Cost Efficiency
+
+- **No public SSH:** All runners are accessible only via Secure APIs and WebSocket connections.
+- **Ephemeral infrastructure:** VPS is created only for the duration of the test, then deleted.
+- **Minimal cost:** Using the smallest Hetzner instance, each test run costs only a fraction of a cent.
+
+## 💰 Billing Model
+
+### GitHub
+- Used only for orchestration
+- Responsible for:
+  - provisioning workflow
+  - triggering runner creation
+  - cleanup workflow execution
+- Does NOT execute tests
+
+### Hetzner Cloud
+:contentReference[oaicite:1]{index=1}
+
+- runs all compute workloads:
+  - pytest execution
+  - dependency installation
+  - build steps
+- billed per VM runtime
