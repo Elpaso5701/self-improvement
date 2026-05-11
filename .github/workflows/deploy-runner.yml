@@ -1,7 +1,7 @@
 name: 🚀 Deploy Hetzner Runner & Test
 
 on:
-  push:
+  pull_request:
     branches: [main]
     paths:
       - 'utils.py'          # триггер только если изменился код
