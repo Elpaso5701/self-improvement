@@ -4,7 +4,7 @@ exec > /var/log/runner-setup.log 2>&1
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl jq git python3 python3-pip
+apt-get install -y -qq curl jq git python3 python3-pip wget
 
 # Cloudflare Tunnel (нет публичного SSH)
 curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
@@ -17,11 +17,11 @@ systemctl start cloudflared
 echo "✓ Cloudflare tunnel started"
 
 # GitHub Actions Runner
-RUNNER_VERSION="2.322.0"
+RUNNER_VERSION="2.333.0"
 echo "Runner version: ${RUNNER_VERSION}"
 
 mkdir -p /opt/actions-runner && cd /opt/actions-runner
-curl -sL -o runner.tar.gz \
+wget -q -O runner.tar.gz \
   "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
 
 tar xzf runner.tar.gz
