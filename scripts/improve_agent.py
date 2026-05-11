@@ -61,7 +61,7 @@ Your task — improve utils.py by doing ONE OR MORE of the following:
 2. Add or improve docstrings (Google style)
 3. Improve an existing function's implementation (edge cases, efficiency)
 4. Add ONE new small utility function that fits the module's theme
-   (and add its tests to tests/test_utils.py as well)
+   (and add its tests to tests/test_utils.py as well — IMPORTANT: also update the import line at the top of test_utils.py to include the new function name)
 
 Rules:
 - Return ONLY valid Python code, no markdown fences, no explanations
