@@ -1,33 +1,60 @@
 # 🤖 Self-Improving Python Utilities
 
-This repository demonstrates a fully automated, self-improving Python codebase using LLMs (Large Language Models) and ephemeral CI infrastructure.
+A fully automated self-improving Python codebase powered by LLMs and ephemeral CI infrastructure.
 
-- **Automated code improvement:** Every 2 hours, an LLM agent reviews and enhances the codebase, creating a Pull Request with improvements if all tests pass.
-- **Ephemeral CI runners:** Tests are executed on temporary Hetzner VPS machines, which are created and destroyed automatically to minimize costs and maximize security.
-- **Zero public SSH exposure:** All CI runners are accessible only via secure tunnels.
-
----
-
-## 🚀 Features
-
-### 1. LLM-Powered Self-Improvement
-
-- The `improve_agent.py` script uses OpenAI GPT-4o to:
-  - Add type hints and docstrings
-  - Refactor and optimize code
-  - Add new utility functions with corresponding tests
-- Improvements are committed only if all tests pass.
-- Automated workflow runs every 2 hours via GitHub Actions (`.github/workflows/self-improve.yml`).
-
-### 2. Ephemeral Hetzner CI Runners
-
-- On each pull request or code change, a minimal Hetzner VPS is provisioned using [Cyclenerd/hcloud-github-runner](https://github.com/Cyclenerd/hcloud-github-runner).
-- The runner is accessible only via secure tunnels (no public SSH).
-- After tests complete, the VPS is deleted to avoid unnecessary costs (approx. €0.01 per test run).
-- See `.github/workflows/deploy-runner.yml` for details.
+This project demonstrates:
+- LLM-driven autonomous code improvement
+- ephemeral CI runners on Hetzner Cloud
+- fully isolated test execution environment
+- zero persistent infrastructure for CI workloads
 
 ---
 
+## 🧠 System Overview
+
+The system consists of two core components:
+
+### 1. LLM Self-Improvement Engine
+An automated agent that periodically improves the codebase using GPT-4o-mini.
+
+### 2. Ephemeral CI Infrastructure
+Temporary Hetzner Cloud machines used as self-hosted GitHub Actions runners for test execution.
+
+---
+
+## 🚀 Key Features
+
+### 🤖 1. LLM-Powered Self-Improvement
+
+The `improve_agent.py` script:
+
+- analyzes `utils.py` and test suite
+- uses GPT-4o-mini to propose improvements
+- applies:
+  - type hints
+  - docstrings
+  - refactoring
+  - optional utility expansions
+- runs full test suite before applying changes
+- commits only if all tests pass
+
+📅 Runs automatically every 2 hours via GitHub Actions:
+`.github/workflows/self-improve.yml`
+
+---
+
+### 🏃 2. Ephemeral Hetzner CI Runners
+
+Each pull request triggers a fully isolated CI environment:
+
+- a temporary VM is created on :contentReference[oaicite:0]{index=0}
+- VM is registered as a GitHub Actions self-hosted runner
+- tests are executed inside the VM
+- VM is destroyed immediately after execution
+
+📄 Implementation: `.github/workflows/run-tests.yml`
+
+---
 ## 📁 Repository Structure
 ```
 .github/workflows/ 
@@ -41,26 +68,28 @@ tests
 requirements.txt       # Python dependencies
 ```
 
-## ⚡ Getting Started
+
+---
+
+## ⚙️ Getting Started
 
 ### 1. Prerequisites
 
 - Python 3.11+
-- [Hetzner Cloud account](https://www.hetzner.com/cloud)
-- OpenAI API key (personal subscription)
+- Hetzner Cloud account
+- OpenAI API key
 - GitHub repository with Actions enabled
+
+---
 
 ### 2. Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/your-username/self-improvement.git
 cd self-improvement
-````
-# Install dependencies
-```bash
+
 pip install -r requirements.txt
-```
+
 ## 🛠️ How It Works
 
 ### 🤖 LLM Self-Improvement Workflow
@@ -101,7 +130,6 @@ pip install -r requirements.txt
 - Does NOT execute tests
 
 ### Hetzner Cloud
-:contentReference[oaicite:1]{index=1}
 
 - runs all compute workloads:
   - pytest execution
