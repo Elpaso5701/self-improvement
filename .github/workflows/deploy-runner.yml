@@ -96,7 +96,7 @@ jobs:
               \"name\": \"${SERVER_NAME}\",
               \"server_type\": \"cx23\",
               \"image\": \"ubuntu-22.04\",
-              \"location\": \"nbg1\",
+              \"location\": \"fsn1\",
               \"user_data\": $(echo "$CLOUD_INIT" | jq -Rs .),
               \"public_net\": {\"enable_ipv4\": true, \"enable_ipv6\": false}
             }")
