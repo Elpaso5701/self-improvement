@@ -30,10 +30,8 @@ jobs:
           hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
 
           server_type: cx23
-          location: auto
+          location: nbg1
           image: ubuntu-22.04
-
-          labels: self-hosted,hetzner,ephemeral,gh-runner
 
   # ═══════════════════════════════════════
   # 2️⃣ RUN TESTS
