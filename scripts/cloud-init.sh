@@ -24,7 +24,6 @@ mkdir -p /opt/actions-runner && cd /opt/actions-runner
 curl -sL -o runner.tar.gz \
   "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
 
-file runner.tar.gz
 tar xzf runner.tar.gz
 rm runner.tar.gz
 
