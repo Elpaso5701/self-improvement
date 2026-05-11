@@ -35,7 +35,7 @@ jobs:
         run: python scripts/improve_agent.py
 
       - name: Run tests after improvement
-        run: pytest tests/ -v --tb=short
+        run: PYTHONPATH=. pytest tests/ -v --tb=short
 
       - name: Commit improvements
         run: |
