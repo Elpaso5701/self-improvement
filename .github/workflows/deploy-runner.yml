@@ -6,21 +6,19 @@ on:
     paths:
       - 'utils.py'
       - 'tests/**'
-
   workflow_dispatch:
 
 jobs:
 
   # ═══════════════════════════════════════
-  # 1️⃣ CREATE RUNNER (Hetzner VM + GitHub Runner)
+  # 1️⃣ CREATE RUNNER
   # ═══════════════════════════════════════
   create-runner:
-    name: Create Hetzner Runner
     runs-on: ubuntu-latest
 
     outputs:
-      label: ${{ steps.runner.outputs.label }}
       server_id: ${{ steps.runner.outputs.server_id }}
+      label: ${{ steps.runner.outputs.label }}
 
     steps:
       - name: Create runner
@@ -28,28 +26,25 @@ jobs:
         uses: Cyclenerd/hcloud-github-runner@v1
         with:
           mode: create
-
           github_token: ${{ secrets.GH_PAT }}
           hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
 
           server_type: cx23
-          location: nbg1
+          location: auto
           image: ubuntu-22.04
 
-          # ✔ стабильный label для matching
           labels: self-hosted,hetzner,ephemeral,gh-runner
 
   # ═══════════════════════════════════════
-  # 2️⃣ RUN TESTS (на VM runner)
+  # 2️⃣ RUN TESTS
   # ═══════════════════════════════════════
   test:
-    name: Run Tests
     needs: create-runner
 
     runs-on: ${{ needs.create-runner.outputs.label }}
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -59,18 +54,26 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install pytest httpx
 
       - name: Run tests
         run: |
-          echo "Running tests on Hetzner VM..."
-          PYTHONPATH=. pytest tests -v
+          set -e
+
+          echo "⏳ Running tests on ephemeral runner..."
+
+          export PYTHONPATH=$PWD
+
+          pytest tests/ -v --tb=short
+
+          echo "✓ Tests completed successfully"
 
   # ═══════════════════════════════════════
-  # 3️⃣ DELETE RUNNER (cleanup always)
+  # 3️⃣ CLEANUP
   # ═══════════════════════════════════════
   delete-runner:
-    name: Delete Hetzner Runner
     needs:
       - create-runner
       - test
