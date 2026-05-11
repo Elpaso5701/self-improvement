@@ -118,7 +118,7 @@ jobs:
   # ══════════════════════════════════════════════════════════════════════════
   cleanup:
     if: always()
-    needs: deploy
+    needs: [deploy, test]
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
