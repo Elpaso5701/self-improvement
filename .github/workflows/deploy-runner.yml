@@ -81,6 +81,7 @@ jobs:
 
     steps:
       - name: Delete runner + VM
+        continue-on-error: true
         uses: Cyclenerd/hcloud-github-runner@v1
         with:
           mode: delete
