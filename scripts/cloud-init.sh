@@ -34,8 +34,7 @@ rm runner.tar.gz
   --labels "ephemeral,hetzner,${SERVER_NAME}" \
   --ephemeral \
   --unattended \
-  --disableupdate \
-  --allow-runasroot
+  --disableupdate
 
 echo "✓ Runner registered"
 RUNNER_ALLOW_RUNASROOT=1 ./run.sh --once || true
