@@ -1,5 +1,5 @@
 import pytest
-from utils import add, multiply, validate_email, count_words, reverse_string
+from utils import add, multiply, validate_email, count_words, reverse_string, is_palindrome
 
 def test_add():
     assert add(2, 3) == 5
@@ -18,3 +18,10 @@ def test_count_words():
 
 def test_reverse_string():
     assert reverse_string("hello") == "olleh"
+
+def test_is_palindrome():
+    assert is_palindrome("A man a plan a canal Panama") == True
+    assert is_palindrome("hello") == False
+    assert is_palindrome("racecar") == True
+    assert is_palindrome("12321") == True
+    assert is_palindrome("12345") == False
