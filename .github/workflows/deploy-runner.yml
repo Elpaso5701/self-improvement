@@ -48,23 +48,38 @@ jobs:
           # Читаем cloud-init из файла и подставляем переменные
           CLOUD_INIT=$(envsubst '${CF_TUNNEL_TOKEN} ${REG_TOKEN} ${GITHUB_REPO} ${SERVER_NAME}' < scripts/cloud-init.sh)
           
-
-          RESPONSE=$(curl -s -X POST \
-            -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "https://api.hetzner.cloud/v1/servers" \
-            -d "{
-              \"name\": \"${SERVER_NAME}\",
-              \"server_type\": \"cx23\",
-              \"image\": \"ubuntu-22.04\",
-              \"location\": \"fsn1\",
-              \"user_data\": $(echo "$CLOUD_INIT" | jq -Rs .),
-              \"public_net\": {\"enable_ipv4\": true, \"enable_ipv6\": false}
-            }")
+          # Перебираем локации пока не найдём свободную
+          LOCATIONS=("nbg1" "fsn1" "hel1")
+          SERVER_ID=""
+                
+          for LOCATION in "${LOCATIONS[@]}"; do
+            echo "▶ Trying location: ${LOCATION}..."
+            RESPONSE=$(curl -s -X POST \
+                -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "https://api.hetzner.cloud/v1/servers" \
+                -d "{
+                \"name\": \"${SERVER_NAME}\",
+                \"server_type\": \"cx23\",
+                \"image\": \"ubuntu-22.04\",
+                \"location\": \"${LOCATION}\",
+                \"user_data\": $(echo "$CLOUD_INIT" | jq -Rs .),
+                \"public_net\": {\"enable_ipv4\": true, \"enable_ipv6\": false}
+                }")
 
           SERVER_ID=$(echo "$RESPONSE" | jq -r '.server.id')
-          [[ "$SERVER_ID" == "null" || -z "$SERVER_ID" ]] && \
-            echo "❌ Failed to create server" && echo "$RESPONSE" && exit 1
+
+           if [[ -n "$SERVER_ID" && "$SERVER_ID" != "null" ]]; then
+                echo "✓ Server created in ${LOCATION} (ID: $SERVER_ID)"
+                break
+            fi
+
+
+            echo "   ✗ ${LOCATION} unavailable, trying next..."
+          done
+        
+           [[ -z "$SERVER_ID" || "$SERVER_ID" == "null" ]] && \
+            echo "❌ Failed to create server in all locations" && exit 1
 
           echo "server_id=$SERVER_ID" >> $GITHUB_OUTPUT
           echo "✓ Server created (ID: $SERVER_ID, Name: $SERVER_NAME)"
@@ -96,7 +111,7 @@ jobs:
           SERVER_NAME: ${{ steps.create_server.outputs.server_name }}
         run: |
           curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_PAT }}" \
+            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/run-tests.yml/dispatches" \
             -d "{\"ref\": \"main\", \"inputs\": {\"runner_label\": \"${SERVER_NAME}\"}}"
@@ -110,7 +125,7 @@ jobs:
           for i in $(seq 1 40); do
             sleep 15
             STATUS=$(curl -s \
-              -H "Authorization: Bearer ${{ secrets.GITHUB_PAT }}" \
+              -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=10" \
               | jq -r '[.workflow_runs[] | select(.name == "🧪 Run Tests (Ephemeral Runner)" and .status != "queued" and .status != "in_progress")] | first | .conclusion // empty')
