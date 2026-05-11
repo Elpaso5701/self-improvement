@@ -87,7 +87,7 @@ git clone https://github.com/your-username/self-improvement.git
 cd self-improvement
 
 pip install -r requirements.txt
-
+```
 ## 🛠️ How It Works
 
 ### 🤖 LLM Self-Improvement Workflow
