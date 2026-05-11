@@ -1,17 +1,15 @@
 name: 🧪 Run Tests (Ephemeral Runner)
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       runner_label:
-        description: 'Self-hosted runner label (server name)'
         required: true
         type: string
 
 jobs:
   test:
-    # Запускаем ТОЛЬКО на нашем эфемерном runner по метке
-    runs-on: [self-hosted, "${{ inputs.runner_label }}"]
+    runs-on: [self-hosted, ${{ inputs.runner_label }}]
     timeout-minutes: 10
 
     steps:
