@@ -16,13 +16,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@c8813ba1bc76ebf779b911ad8ffccbf2e449cb48
         with:
           python-version: '3.11'
 
@@ -42,7 +42,7 @@ jobs:
       #SecOps: Создаём PR только если все тесты прошли успешно  
       - name: Create Pull Request with improvements
         if: success()
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@aa523f9db61947bd5e06efd77870ef065eae32cc
         with:
           token: ${{ secrets.GH_PAT }}
           commit-message: "🤖 Auto-improvement"
