@@ -1,22 +1,18 @@
 """
 LLM Self-Improvement Agent
-Читает utils.py и тесты, просит Claude/GPT улучшить код,
+Читает utils.py и тесты, просит GPT улучшить код,
 записывает результат обратно — только если тесты проходят.
 """
 
 import os
 import sys
 import subprocess
-import tempfile
-import shutil
 from openai import OpenAI
 
-# ── настройки ────────────────────────────────────────────────────
-TARGET_FILE  = "utils.py"
-TESTS_DIR    = "tests/"
-MODEL        = "gpt-4o-mini"        # дёшево и достаточно умно
-MAX_TOKENS   = 2048
-# ────────────────────────────────────────────────────────────────
+TARGET_FILE = "utils.py"
+TESTS_FILE  = "tests/test_utils.py"
+MODEL       = "gpt-4o-mini"
+MAX_TOKENS  = 2048
 
 
 def read_file(path: str) -> str:
@@ -30,62 +26,61 @@ def write_file(path: str, content: str) -> None:
 
 
 def run_tests() -> tuple[bool, str]:
-    """Запускает pytest и возвращает (success, output)."""
     result = subprocess.run(
-        ["pytest", TESTS_DIR, "-v", "--tb=short", "--no-header"],
-        capture_output=True,
-        text=True,
+        ["pytest", "tests/", "-v", "--tb=short", "--no-header"],
+        capture_output=True, text=True,
     )
-    passed = result.returncode == 0
-    return passed, result.stdout + result.stderr
+    return result.returncode == 0, result.stdout + result.stderr
 
 
-def ask_llm(current_code: str, current_tests: str) -> str:
-    """Отправляет код в LLM и получает улучшенную версию."""
+def ask_llm(current_utils: str, current_tests: str) -> str:
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
     prompt = f"""You are a senior Python developer doing a code review and improvement pass.
 
-Here is the CURRENT utils.py:
+CURRENT utils.py:
 ```python
-{current_code}
+{current_utils}
 ```
 
-Here are the EXISTING tests (DO NOT break them):
+CURRENT test_utils.py:
 ```python
 {current_tests}
 ```
 
-Your task — improve utils.py by doing ONE OR MORE of the following:
+Your task: improve utils.py by doing ONE OR MORE of:
 1. Add proper type hints to all functions
 2. Add or improve docstrings (Google style)
 3. Improve an existing function's implementation (edge cases, efficiency)
 4. Add ONE new small utility function that fits the module's theme
-   (and add its tests to tests/test_utils.py as well — IMPORTANT: also update the import line at the top of test_utils.py to include the new function name)
 
-Rules:
-- Return ONLY valid Python code, no markdown fences, no explanations
-- All existing tests MUST still pass
-- Keep the file clean and production-quality
-- If you add a new function, end your response with the separator line:
-  ### NEW_TEST ###
-  and then the pytest code for the new function (plain Python, no fences)
+RESPONSE FORMAT — return both files separated by exactly this line:
+### TEST_FILE ###
 
-Respond now with the improved utils.py content:
+- First: the complete improved utils.py (no markdown fences, plain Python only)
+- Then the separator line
+- Then: the COMPLETE updated test_utils.py
+
+CRITICAL rules for test_utils.py:
+- Keep ALL existing tests unchanged
+- If you added a new function to utils.py — add its test
+- The import line MUST import every function that appears in tests
+- Example: from utils import add, multiply, validate_email, count_words, reverse_string, new_func
+
+Respond now:
 """
 
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
-        temperature=0.6,
+        temperature=0.4,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content.strip()
 
 
 def parse_response(raw: str) -> tuple[str, str | None]:
-    """Разбивает ответ LLM на (utils_code, new_test_code | None)."""
-    separator = "### NEW_TEST ###"
+    separator = "### TEST_FILE ###"
     if separator in raw:
         parts = raw.split(separator, 1)
         return parts[0].strip(), parts[1].strip()
@@ -93,7 +88,6 @@ def parse_response(raw: str) -> tuple[str, str | None]:
 
 
 def validate_python(code: str, label: str) -> bool:
-    """Проверяет синтаксис через compile()."""
     try:
         compile(code, label, "exec")
         return True
@@ -104,54 +98,39 @@ def validate_python(code: str, label: str) -> bool:
 
 def main() -> None:
     print("🤖 Self-Improvement Agent starting...")
-    
-    # 1. Читаем текущее состояние
+
     current_utils = read_file(TARGET_FILE)
-    current_tests = read_file(f"{TESTS_DIR}test_utils.py")
+    current_tests = read_file(TESTS_FILE)
 
-    # 2. Спрашиваем LLM
     print(f"📡 Calling {MODEL}...")
-    raw_response = ask_llm(current_utils, current_tests)
-    new_utils, new_test_snippet = parse_response(raw_response)
+    raw = ask_llm(current_utils, current_tests)
+    new_utils, new_tests = parse_response(raw)
 
-    # 3. Проверяем синтаксис
+    # Валидация синтаксиса
     if not validate_python(new_utils, "utils.py"):
-        print("⚠️  LLM returned invalid Python for utils.py — skipping.")
+        print("⚠️  Invalid Python in utils.py — skipping.")
         sys.exit(0)
 
-    # 4. Сохраняем во временные файлы, запускаем тесты
-    backup_utils = current_utils
-    backup_tests = current_tests
+    if new_tests and not validate_python(new_tests, "test_utils.py"):
+        print("⚠️  Invalid Python in test_utils.py — using original tests.")
+        new_tests = None
 
-    try:
-        write_file(TARGET_FILE, new_utils)
+    # Записываем и тестируем
+    write_file(TARGET_FILE, new_utils)
+    if new_tests:
+        write_file(TESTS_FILE, new_tests)
 
-        # Если LLM добавил новый тест — дописываем в файл
-        if new_test_snippet:
-            if validate_python(new_test_snippet, "new_test"):
-                updated_tests = current_tests + "\n\n" + new_test_snippet
-                write_file(f"{TESTS_DIR}test_utils.py", updated_tests)
-            else:
-                print("⚠️  New test code is invalid syntax — ignoring new test only.")
+    passed, output = run_tests()
+    print(output)
 
-        passed, output = run_tests()
-        print(output)
-
-        if passed:
-            print("✅ All tests pass — improvement committed!")
-            # Покажем diff
-            subprocess.run(["git", "diff", TARGET_FILE])
-        else:
-            print("❌ Tests failed — reverting to original code.")
-            write_file(TARGET_FILE, backup_utils)
-            write_file(f"{TESTS_DIR}test_utils.py", backup_tests)
-            sys.exit(0)   # не падаем — просто не коммитим
-
-    except Exception as exc:
-        print(f"💥 Unexpected error: {exc} — reverting.")
-        write_file(TARGET_FILE, backup_utils)
-        write_file(f"{TESTS_DIR}test_utils.py", backup_tests)
-        raise
+    if passed:
+        print("✅ All tests pass — improvement will be committed!")
+        subprocess.run(["git", "diff", TARGET_FILE])
+    else:
+        print("❌ Tests failed — reverting.")
+        write_file(TARGET_FILE, current_utils)
+        write_file(TESTS_FILE, current_tests)
+        sys.exit(0)
 
 
 if __name__ == "__main__":
