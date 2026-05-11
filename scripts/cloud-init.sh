@@ -27,7 +27,7 @@ wget -q -O runner.tar.gz \
 tar xzf runner.tar.gz
 rm runner.tar.gz
 
-./config.sh \
+RUNNER_ALLOW_RUNASROOT=1 ./config.sh \
   --url "https://github.com/${GITHUB_REPO}" \
   --token "${REG_TOKEN}" \
   --name "${SERVER_NAME}" \
