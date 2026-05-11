@@ -28,7 +28,6 @@ jobs:
           mode: create
           github_token: ${{ secrets.GH_PAT }}
           hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
-
           server_type: cx23
           location: nbg1
           image: ubuntu-22.04
@@ -38,9 +37,8 @@ jobs:
   # ═══════════════════════════════════════
   test:
     needs: create-runner
-
     runs-on: ${{ needs.create-runner.outputs.label }}
-
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231
@@ -82,7 +80,7 @@ jobs:
     steps:
       - name: Delete runner + VM
         continue-on-error: true
-        uses: Cyclenerd/hcloud-github-runner@v1
+        uses: Cyclenerd/hcloud-github-runner@54da4707b01dfca5dd38cd15cde4afcd950f2b4a
         with:
           mode: delete
 
