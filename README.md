@@ -136,5 +136,3 @@ pip install -r requirements.txt
   - dependency installation
   - build steps
 - billed per VM runtime
-
-
