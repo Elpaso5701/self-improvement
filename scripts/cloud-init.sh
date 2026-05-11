@@ -38,5 +38,5 @@ rm runner.tar.gz
   --allow-runasroot
 
 echo "✓ Runner registered"
-./run.sh --once || true
+RUNNER_ALLOW_RUNASROOT=1 ./run.sh --once || true
 echo "✓ Runner done"
