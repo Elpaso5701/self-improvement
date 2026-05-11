@@ -106,36 +106,42 @@ jobs:
           echo "❌ Runner never came online" && exit 1
 
       # ── 4. Запускаем тесты на Hetzner runner ──────────────────────────────
-      - name: Trigger test workflow
-        env:
-          SERVER_NAME: ${{ steps.create_server.outputs.server_name }}
-        run: |
-          curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/run-tests.yml/dispatches" \
-            -d "{\"ref\": \"main\", \"inputs\": {\"runner_label\": \"${SERVER_NAME}\"}}"
-          echo "✓ Test workflow dispatched on runner: ${SERVER_NAME}"
+    #   - name: Trigger test workflow
+    #     env:
+    #       SERVER_NAME: ${{ steps.create_server.outputs.server_name }}
+    #     run: |
+    #       curl -s -X POST \
+    #         -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+    #         -H "Accept: application/vnd.github+json" \
+    #         "https://api.github.com/repos/${{ github.repository }}/actions/workflows/run-tests.yml/dispatches" \
+    #         -d "{\"ref\": \"main\", \"inputs\": {\"runner_label\": \"${SERVER_NAME}\"}}"
+    #       echo "✓ Test workflow dispatched on runner: ${SERVER_NAME}"
 
-      # ── 5. Ждём завершения тестов ──────────────────────────────────────────
-      - name: Wait for tests to finish
-        id: wait_tests
-        run: |
-          echo "⏳ Waiting for test job (max 10 min)..."
-          for i in $(seq 1 40); do
-            sleep 15
-            STATUS=$(curl -s \
-              -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=10" \
-              | jq -r '[.workflow_runs[] | select(.name == "🧪 Run Tests (Ephemeral Runner)" and .status != "queued" and .status != "in_progress")] | first | .conclusion // empty')
+      - name: Run tests on ephemeral runner
+        uses: ./.github/workflows/run-tests.yml
+        with:
+          runner_label: ${{ steps.create_server.outputs.server_name }}
 
-            [[ -n "$STATUS" ]] && echo "status=$STATUS" >> $GITHUB_OUTPUT && \
-              echo "✓ Tests finished: $STATUS" && exit 0
-            echo "   ...${i}x15s"
-          done
-          echo "status=timeout" >> $GITHUB_OUTPUT
-          echo "⏱️ Timeout waiting for tests"
+
+    #   # ── 5. Ждём завершения тестов ──────────────────────────────────────────
+    #   - name: Wait for tests to finish
+    #     id: wait_tests
+    #     run: |
+    #       echo "⏳ Waiting for test job (max 10 min)..."
+    #       for i in $(seq 1 40); do
+    #         sleep 15
+    #         STATUS=$(curl -s \
+    #           -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
+    #           -H "Accept: application/vnd.github+json" \
+    #           "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=10" \
+    #           | jq -r '[.workflow_runs[] | select(.name == "🧪 Run Tests (Ephemeral Runner)" and .status != "queued" and .status != "in_progress")] | first | .conclusion // empty')
+
+    #         [[ -n "$STATUS" ]] && echo "status=$STATUS" >> $GITHUB_OUTPUT && \
+    #           echo "✓ Tests finished: $STATUS" && exit 0
+    #         echo "   ...${i}x15s"
+    #       done
+    #       echo "status=timeout" >> $GITHUB_OUTPUT
+    #       echo "⏱️ Timeout waiting for tests"
 
       # ── 6. Удаляем VPS (always — даже если тесты упали) ───────────────────
       - name: Delete Hetzner VPS
@@ -143,8 +149,6 @@ jobs:
         env:
           SERVER_ID: ${{ steps.create_server.outputs.server_id }}
         run: |
-          echo "⏸️ Waiting 120s before delete — time to check console..."
-          sleep 120    # ← временно, уберём после диагностики
 
           [[ -z "$SERVER_ID" || "$SERVER_ID" == "null" ]] && \
             echo "No server to delete" && exit 0
