@@ -1,12 +1,17 @@
 name: 🤖 LLM Self-Improvement Agent
 
 on:
+  
   schedule:
-    - cron: '0 */2 * * *'   # каждые 2 часа
-  workflow_dispatch:          # ручной запуск для тестов
+    - cron: '0 */2 * * *'  
+  workflow_dispatch:        
+
+concurrency:
+  group: llm-improvement
+  cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 jobs:
@@ -24,22 +29,22 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@c8813ba1bc76ebf779b911ad8ffccbf2e449cb48
         with:
-          python-version: '3.11'
+          python-version: '3.11.9'
 
       - name: Install dependencies
         run: |
-          pip install openai==1.3.0 httpx==0.24.1 pytest==7.4.3
+          pip install --require-hashes -r requirements.txt
 
       - name: Run LLM improvement agent
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PYTHONPATH: .
         run: python scripts/improve_agent.py
+        timeout-minutes: 5
 
       - name: Run tests after improvement
         run: PYTHONPATH=. pytest tests/ -v --tb=short
 
-      #SecOps: Создаём PR только если все тесты прошли успешно  
       - name: Create Pull Request with improvements
         if: success()
         uses: peter-evans/create-pull-request@aa523f9db61947bd5e06efd77870ef065eae32cc
@@ -76,7 +81,7 @@ jobs:
           echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M UTC')"
           echo "════════════════════════════════════════"  
     
-    #  Альтернативный вариант — коммитить прямо в main (без PR), но это рискованно для продакшена. PR позволяет безопасно проверять изменения и сохранять историю улучшений.      
+    #  Alternative — commit to main (without PR), but this is more risky and less transparent.
     #   - name: Commit improvements
     #     run: |
     #       git config --global user.name  "Self-Improvement Bot"

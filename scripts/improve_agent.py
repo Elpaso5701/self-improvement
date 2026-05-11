@@ -1,7 +1,7 @@
 """
 LLM Self-Improvement Agent
-Читает utils.py и тесты, просит GPT улучшить код,
-записывает результат обратно — только если тесты проходят.
+It reads utils.py and the tests, asks GPT to improve the code,
+and writes the result back—only if the tests pass.
 """
 
 import os

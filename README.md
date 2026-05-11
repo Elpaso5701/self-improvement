@@ -67,8 +67,6 @@ tests
 └── utils.py           # Python utility functions (auto-improved) 
 requirements.txt       # Python dependencies
 ```
-
-
 ---
 
 ## ⚙️ Getting Started
