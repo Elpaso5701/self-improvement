@@ -46,7 +46,7 @@ jobs:
           SERVER_NAME="gh-runner-${{ github.run_id }}"
           echo "server_name=$SERVER_NAME" >> $GITHUB_OUTPUT
           # Читаем cloud-init из файла и подставляем переменные
-          CLOUD_INIT=$(envsubst < scripts/cloud-init.sh)
+          CLOUD_INIT=$(envsubst '${CF_TUNNEL_TOKEN} ${REG_TOKEN} ${GITHUB_REPO} ${SERVER_NAME}' < scripts/cloud-init.sh)
           
 
           RESPONSE=$(curl -s -X POST \
