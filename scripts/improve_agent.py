@@ -106,7 +106,6 @@ def main() -> None:
     raw = ask_llm(current_utils, current_tests)
     new_utils, new_tests = parse_response(raw)
 
-    # Валидация синтаксиса
     if not validate_python(new_utils, "utils.py"):
         print("⚠️  Invalid Python in utils.py — skipping.")
         sys.exit(0)
@@ -115,7 +114,6 @@ def main() -> None:
         print("⚠️  Invalid Python in test_utils.py — using original tests.")
         new_tests = None
 
-    # Записываем и тестируем
     write_file(TARGET_FILE, new_utils)
     if new_tests:
         write_file(TESTS_FILE, new_tests)
